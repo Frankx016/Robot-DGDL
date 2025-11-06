@@ -5,7 +5,7 @@
     <title>Simulador Robot 2 GDL - Estilo Mejorado</title>
     <style>
         /* =================================================================== */
-        /* ESTILOS CSS                                          */
+        /*  ESTILOS CSS                                                        */
         /* =================================================================== */
         
         /* --- Fuentes Globales y Fondo --- */
@@ -157,7 +157,7 @@
 
     <script>
     // =======================================================================
-    //  LÓGICA DE CÁLCULO DEL ROBOT (MOTOR)
+    //  LÓGICA DE CÁLCULO DEL ROBOT (MOTOR) 
     // =======================================================================
     class RobotTrajectoryCalculator {
         constructor(l1, l2, l_tool, ti, tf, xi, yi) {
@@ -170,22 +170,19 @@
             const d = Math.sqrt(x * x + y * y);
             return d >= this.R_min && d <= this.R_max;
         }
-        
         inverseKinematics(x, y) {
             if (!this.isInWorkspace(x, y)) return null;
             let cos_q2 = (x * x + y * y - this.L1 * this.L1 - this.L2 * this.L2) / (2 * this.L1 * this.L2);
             cos_q2 = Math.max(-1.0, Math.min(1.0, cos_q2));
-            
+            const q2 = Math.acos(cos_q2);
             const q1 = Math.atan2(y, x) - Math.atan2(this.L2 * Math.sin(q2), this.L1 + this.L2 * Math.cos(q2));
             return [q1, q2];
         }
-        
         _calculatePolyCoeffs(p_i, p_f) {
             if (this.T <= 0) return [p_i, 0, 0, 0, 0, 0];
             const d = p_f - p_i;
             return [p_i, 0, 0, (10 * d) / this.T**3, -(15 * d) / this.T**4, (6 * d) / this.T**5];
         }
-        
         generateTrajectory(xf, yf, num_points = 100) {
             if (!this.isInWorkspace(xf, yf)) return null;
             const coeffs_x = this._calculatePolyCoeffs(this.xi, xf);
@@ -215,7 +212,7 @@
     }
 
     // =======================================================================
-    //  LÓGICA DE LA INTERFAZ Y DIBUJO (APLICACIÓN)
+    //  LÓGICA DE LA INTERFAZ Y DIBUJO (APLICACIÓN) 
     // =======================================================================
     document.addEventListener('DOMContentLoaded', () => {
         const canvas = document.getElementById('robotCanvas');
@@ -228,7 +225,7 @@
 
         const L1_ROBOT = 12.0, L2_ROBOT = 12.0, L_PINZA = 2.0;
         const POS_INICIAL_X = 14.0, POS_INICIAL_Y = 14.0;
-              let calculator = new RobotTrajectoryCalculator(L1_ROBOT, L2_ROBOT, L_PINZA, 0, 20, POS_INICIAL_X, POS_INICIAL_Y);
+        let calculator = new RobotTrajectoryCalculator(L1_ROBOT, L2_ROBOT, L_PINZA, 0, 20, POS_INICIAL_X, POS_INICIAL_Y);
         let currentAngles = calculator.inverseKinematics(POS_INICIAL_X, POS_INICIAL_Y);
 
         function toCanvasCoords(cartesian) {
