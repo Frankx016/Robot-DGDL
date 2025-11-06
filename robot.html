@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulador Robot 2 GDL - Estilo Mejorado</title>
+    <style>
+        /* =================================================================== */
+        /* ESTILOS CSS                                          */
+        /* =================================================================== */
+        
+        /* --- Fuentes Globales y Fondo --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f7f6; /* Fondo gris muy claro */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Alinea las tarjetas arriba */
+            gap: 24px;
+            padding: 24px;
+            flex-wrap: wrap; /* Permite que se reordenen si no caben */
+            color: #333;
+        }
+
+        /* --- Estilo de las "Tarjetas" (Contenedores) --- */
+        .controls, .simulation, .graphs {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background-color: #ffffff; /* Fondo blanco para las tarjetas */
+            padding: 24px;
+            border-radius: 12px; /* Bordes redondeados */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* Sombra suave */
+            border: 1px solid #e0e0e0;
+        }
+        
+        /* Ajustar el ancho de las tarjetas */
+        .controls { flex-basis: 300px; }
+        .simulation { flex-basis: 550px; }
+        .graphs { flex-basis: 300px; }
+
+        /* --- Títulos de las Tarjetas --- */
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1a2b48;
+            margin: 0 0 8px 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+            text-align: center;
+        }
+
+        /* --- Grupos de Inputs --- */
+        .input-group {
+            display: flex;
+            flex-direction: column; /* Pone la etiqueta encima del input */
+            align-items: stretch;
+            gap: 6px;
+        }
+        .input-group label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        /* --- Estilo de Inputs --- */
+        input[type="number"] {
+            padding: 10px;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box; /* Asegura que el padding no afecte el ancho */
+            width: 100%;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.15);
+        }
+
+        /* --- Estilo de Botones --- */
+        button {
+            padding: 12px 16px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        /* Botón Principal (Mover) */
+        #calculateBtn {
+            background-color: #007bff; /* Azul primario */
+            color: white;
+        }
+        #calculateBtn:hover {
+            background-color: #0056b3; /* Azul más oscuro */
+            transform: translateY(-1px);
+        }
+
+        /* Botón Secundario (Home) */
+        #homeBtn {
+            background-color: #6c757d; /* Gris secundario */
+            color: white;
+        }
+        #homeBtn:hover {
+            background-color: #5a6268; /* Gris más oscuro */
+            transform: translateY(-1px);
+        }
+
+        /* --- Estilo de Canvas --- */
+        canvas {
+            border: 1px solid #dcdcdc;
+            border-radius: 4px; /* Bordes redondeados leves */
+            background-color: #fafafa;
+        }
+        
+        .graphs label { 
+            font-weight: 600;
+            text-align: center; 
+            font-size: 0.9rem; 
+            color: #444;
+            margin-bottom: -8px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h2>🤖 Controles del Robot</h2>
+        <div class="input-group">
+            <label for="x_coord">Posición X (cm):</label>
+            <input type="number" id="x_coord" value="-15" step="0.5">
+        </div>
+        <div class="input-group">
+            <label for="y_coord">Posición Y (cm):</label>
+            <input type="number" id="y_coord" value="10" step="0.5">
+        </div>
+        <button id="calculateBtn">Mover a Posición</button>
+        <button id="homeBtn">Ir a Inicio (14, 14)</button>
+        <div id="info"></div>
+    </div>
+
+    <div class="simulation">
+        <h2>🖥️ Simulación Cartesiana</h2>
+        <canvas id="robotCanvas" width="550" height="550"></canvas>
+    </div>
+
+    <div class="graphs">
+        <h2>📈 Gráficas Articulares</h2>
+        <label for="q1Graph">q1(t) (rad vs t)</label>
+        <canvas id="q1Graph" width="300" height="150"></canvas>
+        <label for="q2Graph">q2(t) (rad vs t)</label>
+        <canvas id="q2Graph" width="300" height="150"></canvas>
+    </div>
+
+    <script>
+    // =======================================================================
+    //  LÓGICA DE CÁLCULO DEL ROBOT (MOTOR)
+    // =======================================================================
+    class RobotTrajectoryCalculator {
+        constructor(l1, l2, l_tool, ti, tf, xi, yi) {
+            this.L1 = l1; this.L2 = l2 + l_tool; 
+            this.R_max = this.L1 + this.L2; this.R_min = Math.abs(this.L1 - this.L2);
+            this.ti = ti; this.tf = tf; this.T = tf - ti;
+            this.xi = xi; this.yi = yi;
+        }
+        isInWorkspace(x, y) {
+            const d = Math.sqrt(x * x + y * y);
+            return d >= this.R_min && d <= this.R_max;
+        }
+        
+        inverseKinematics(x, y) {
+            if (!this.isInWorkspace(x, y)) return null;
+            let cos_q2 = (x * x + y * y - this.L1 * this.L1 - this.L2 * this.L2) / (2 * this.L1 * this.L2);
+            cos_q2 = Math.max(-1.0, Math.min(1.0, cos_q2));
+            
+            const q1 = Math.atan2(y, x) - Math.atan2(this.L2 * Math.sin(q2), this.L1 + this.L2 * Math.cos(q2));
+            return [q1, q2];
+        }
+        
+        _calculatePolyCoeffs(p_i, p_f) {
+            if (this.T <= 0) return [p_i, 0, 0, 0, 0, 0];
+            const d = p_f - p_i;
+            return [p_i, 0, 0, (10 * d) / this.T**3, -(15 * d) / this.T**4, (6 * d) / this.T**5];
+        }
+        
+        generateTrajectory(xf, yf, num_points = 100) {
+            if (!this.isInWorkspace(xf, yf)) return null;
+            const coeffs_x = this._calculatePolyCoeffs(this.xi, xf);
+            const coeffs_y = this._calculatePolyCoeffs(this.yi, yf);
+            const cartesian_path = [], joint_path_q1 = [], joint_path_q2 = [], time_steps = [];
+            
+            if (this.T <= 0) {
+                 const angles = this.inverseKinematics(this.xi, this.yi);
+                 if (!angles) return null;
+                 cartesian_path.push({x: this.xi, y: this.yi});
+                 joint_path_q1.push(angles[0]); joint_path_q2.push(angles[1]); time_steps.push(0);
+                 return { cartesian_path, joint_path_q1, joint_path_q2, time_steps, T: 0.1 };
+            }
+            const t_array = Array.from({length: num_points}, (_, i) => this.ti + (this.T * i) / (num_points - 1));
+            for (const t_val of t_array) {
+                let x = 0, y = 0;
+                for (let i = 0; i < 6; i++) { x += coeffs_x[i] * t_val**i; y += coeffs_y[i] * t_val**i; }
+                const angles = this.inverseKinematics(x, y);
+                if (angles) {
+                    cartesian_path.push({x, y});
+                    joint_path_q1.push(angles[0]); joint_path_q2.push(angles[1]); time_steps.push(t_val);
+                }
+            }
+            this.xi = xf; this.yi = yf;
+            return { cartesian_path, joint_path_q1, joint_path_q2, time_steps, T: this.T };
+        }
+    }
+
+    // =======================================================================
+    //  LÓGICA DE LA INTERFAZ Y DIBUJO (APLICACIÓN)
+    // =======================================================================
+    document.addEventListener('DOMContentLoaded', () => {
+        const canvas = document.getElementById('robotCanvas');
+        const ctx = canvas.getContext('2d');
+        const scale = 10; 
+        const origin = { x: canvas.width / 2, y: canvas.height / 2 };
+        
+        const q1Canvas = document.getElementById('q1Graph'), q2Canvas = document.getElementById('q2Graph');
+        const q1Ctx = q1Canvas.getContext('2d'), q2Ctx = q2Canvas.getContext('2d');
+
+        const L1_ROBOT = 12.0, L2_ROBOT = 12.0, L_PINZA = 2.0;
+        const POS_INICIAL_X = 14.0, POS_INICIAL_Y = 14.0;
+              let calculator = new RobotTrajectoryCalculator(L1_ROBOT, L2_ROBOT, L_PINZA, 0, 20, POS_INICIAL_X, POS_INICIAL_Y);
+        let currentAngles = calculator.inverseKinematics(POS_INICIAL_X, POS_INICIAL_Y);
+
+        function toCanvasCoords(cartesian) {
+            return { x: origin.x + cartesian.x * scale, y: origin.y - cartesian.y * scale };
+        }
+        
+        function drawGridAndAxes() {
+            const canvasWidth = canvas.width, canvasHeight = canvas.height;
+            const gridStepCm = 5, gridStepPx = gridStepCm * scale;
+            ctx.lineWidth = 1; ctx.font = '10px Arial';
+            ctx.strokeStyle = '#e0e0e0'; ctx.fillStyle = '#555';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            for (let x = gridStepPx; x + origin.x <= canvasWidth; x += gridStepPx) { ctx.beginPath(); ctx.moveTo(origin.x + x, 0); ctx.lineTo(origin.x + x, canvasHeight); ctx.stroke(); ctx.fillText(x / scale, origin.x + x, origin.y + 5); }
+            for (let x = -gridStepPx; x + origin.x >= 0; x -= gridStepPx) { ctx.beginPath(); ctx.moveTo(origin.x + x, 0); ctx.lineTo(origin.x + x, canvasHeight); ctx.stroke(); ctx.fillText(x / scale, origin.x + x, origin.y + 5); }
+            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+            for (let y = gridStepPx; y + origin.y <= canvasHeight; y += gridStepPx) { ctx.beginPath(); ctx.moveTo(0, origin.y + y); ctx.lineTo(canvasWidth, origin.y + y); ctx.stroke(); ctx.fillText(-y / scale, origin.x - 5, origin.y + y); }
+            for (let y = -gridStepPx; y + origin.y >= 0; y -= gridStepPx) { ctx.beginPath(); ctx.moveTo(0, origin.y + y); ctx.lineTo(canvasWidth, origin.y + y); ctx.stroke(); if (y !== 0) ctx.fillText(-y / scale, origin.x - 5, origin.y + y); }
+            ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, origin.y); ctx.lineTo(canvasWidth, origin.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, canvasHeight); ctx.stroke();
+            ctx.fillStyle = 'black'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+            ctx.fillText("Y (cm)", origin.x + 10, 5);
+            ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+            ctx.fillText("X (cm)", canvasWidth - 5, origin.y - 10);
+        }
+        
+        function drawRobot(q1, q2) {
+            const p1 = { x: L1_ROBOT * Math.cos(q1), y: L1_ROBOT * Math.sin(q1) };
+            const p_wrist = { x: p1.x + L2_ROBOT * Math.cos(q1 + q2), y: p1.y + L2_ROBOT * Math.sin(q1 + q2) };
+            const p1_canvas = toCanvasCoords(p1), p_wrist_canvas = toCanvasCoords(p_wrist); 
+            ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(p1_canvas.x, p1_canvas.y);
+            ctx.lineWidth = 8; ctx.strokeStyle = '#2c3e50'; ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(p1_canvas.x, p1_canvas.y); ctx.lineTo(p_wrist_canvas.x, p_wrist_canvas.y); 
+            ctx.lineWidth = 6; ctx.strokeStyle = '#c0392b'; ctx.stroke();
+            const arm_angle = q1 + q2, gripperWidth = 2.0, gripperFingerLength = L_PINZA;
+            const perp_angle = arm_angle + Math.PI / 2; 
+            const p_finger_base1 = { x: p_wrist.x + (gripperWidth / 2) * Math.cos(perp_angle), y: p_wrist.y + (gripperWidth / 2) * Math.sin(perp_angle) };
+            const p_finger_base2 = { x: p_wrist.x - (gripperWidth / 2) * Math.cos(perp_angle), y: p_wrist.y - (gripperWidth / 2) * Math.sin(perp_angle) };
+            const p_finger_tip1 = { x: p_finger_base1.x + gripperFingerLength * Math.cos(arm_angle), y: p_finger_base1.y + gripperFingerLength * Math.sin(arm_angle) };
+            const p_finger_tip2 = { x: p_finger_base2.x + gripperFingerLength * Math.cos(arm_angle), y: p_finger_base2.y + gripperFingerLength * Math.sin(arm_angle) };
+            const p_finger_base1_canvas = toCanvasCoords(p_finger_base1), p_finger_base2_canvas = toCanvasCoords(p_finger_base2);
+            const p_finger_tip1_canvas = toCanvasCoords(p_finger_tip1), p_finger_tip2_canvas = toCanvasCoords(p_finger_tip2);
+            ctx.lineWidth = 4; ctx.strokeStyle = '#34495e';
+            ctx.beginPath(); ctx.moveTo(p_finger_base1_canvas.x, p_finger_base1_canvas.y); ctx.lineTo(p_finger_tip1_canvas.x, p_finger_tip1_canvas.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(p_finger_base2_canvas.x, p_finger_base2_canvas.y); ctx.lineTo(p_finger_tip2_canvas.x, p_finger_tip2_canvas.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(p_finger_base1_canvas.x, p_finger_base1_canvas.y); ctx.lineTo(p_finger_base2_canvas.x, p_finger_base2_canvas.y); ctx.stroke();
+            ctx.beginPath(); ctx.arc(origin.x, origin.y, 5, 0, 2 * Math.PI); ctx.fillStyle = 'black'; ctx.fill();
+            ctx.beginPath(); ctx.arc(p1_canvas.x, p1_canvas.y, 5, 0, 2 * Math.PI); ctx.fill();
+            ctx.beginPath(); ctx.arc(p_wrist_canvas.x, p_wrist_canvas.y, 4, 0, 2 * Math.PI); ctx.fill();
+        }
+
+        function drawWorkspace() {
+            const maxRadius = calculator.R_max * scale, minRadius = calculator.R_min * scale;
+            ctx.beginPath(); ctx.arc(origin.x, origin.y, maxRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 1; ctx.stroke();
+            if (minRadius > 0) { ctx.beginPath(); ctx.arc(origin.x, origin.y, minRadius, 0, 2 * Math.PI); ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 1; ctx.stroke(); }
+        }
+        
+        function drawPath(path) {
+            ctx.beginPath();
+            path.forEach((point, index) => {
+                const canvasPoint = toCanvasCoords(point);
+                if (index === 0) ctx.moveTo(canvasPoint.x, canvasPoint.y);
+                else ctx.lineTo(canvasPoint.x, canvasPoint.y);
+            });
+            ctx.setLineDash([2, 3]); ctx.strokeStyle = '#007bff'; /* Azul */
+            ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+        }
+        
+        function drawJointGraphs(q1_data, q2_data, time_data, T_total) {
+            const _plot = (ctx, canvas, data, time, T) => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (data.length === 0) return;
+
+                const padding = 30; // Más padding para las etiquetas
+                const plotWidth = canvas.width - padding * 2;
+                const plotHeight = canvas.height - padding * 2;
+
+                let y_min = Math.min(...data), y_max = Math.max(...data);
+                if (Math.abs(y_max - y_min) < 0.1) { y_min -= 0.5; y_max += 0.5; }
+                const y_range = y_max - y_min;
+                const x_range = T;
+
+                const getCanvasX = (t) => padding + (t / x_range) * plotWidth;
+                const getCanvasY = (q) => (canvas.height - padding) - ((q - y_min) / y_range) * plotHeight;
+
+                ctx.beginPath(); ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1;
+                ctx.moveTo(padding, padding); 
+                ctx.lineTo(padding, canvas.height - padding);
+                ctx.lineTo(canvas.width - padding, canvas.height - padding); 
+                ctx.stroke();
+                
+                ctx.fillStyle = '#333'; ctx.font = '10px Arial';
+                ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+                ctx.fillText(y_max.toFixed(2), padding - 6, padding); 
+                ctx.fillText(y_min.toFixed(2), padding - 6, canvas.height - padding); 
+                
+                ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+                ctx.fillText("0s", padding, canvas.height - padding + 6); 
+                ctx.fillText(T.toFixed(1) + "s", canvas.width - padding, canvas.height - padding + 6); 
+
+                ctx.beginPath();
+                ctx.strokeStyle = '#e74c3c'; /* Rojo */
+                ctx.lineWidth = 2;
+                data.forEach((q_val, index) => {
+                    const t_val = time[index];
+                    const canvas_x = getCanvasX(t_val);
+                    const canvas_y = getCanvasY(q_val);
+                    if (index === 0) ctx.moveTo(canvas_x, canvas_y);
+                    else ctx.lineTo(canvas_x, canvas_y);
+                });
+                ctx.stroke();
+            };
+
+            _plot(q1Ctx, q1Canvas, q1_data, time_data, T_total);
+            _plot(q2Ctx, q2Canvas, q2_data, time_data, T_total);
+        }
+
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGridAndAxes();
+            drawWorkspace();
+            if(currentAngles) drawRobot(currentAngles[0], currentAngles[1]);
+        }
+        
+        function moveTo(xf, yf) {
+            const current_xi = calculator.xi;
+            const current_yi = calculator.yi;
+            
+            if (!calculator.isInWorkspace(xf, yf)) {
+                alert("¡Punto fuera del espacio de trabajo!");
+                return;
+            }
+            const pathData = calculator.generateTrajectory(xf, yf);
+            const newAngles = calculator.inverseKinematics(xf, yf);
+            
+            if (!newAngles || !pathData) { 
+                 alert("Error en cinemática inversa o generación de trayectoria.");
+                 calculator.xi = current_xi;
+                 calculator.yi = current_yi;
+                 return;
+            }
+            
+            currentAngles = newAngles;
+            redraw(); 
+            if(pathData.cartesian_path) drawPath(pathData.cartesian_path);
+            
+            drawJointGraphs(
+                pathData.joint_path_q1, 
+                pathData.joint_path_q2, 
+                pathData.time_steps, 
+                pathData.T
+            );
+        }
+
+        document.getElementById('calculateBtn').addEventListener('click', () => {
+            const x = parseFloat(document.getElementById('x_coord').value);
+            const y = parseFloat(document.getElementById('y_coord').value);
+            moveTo(x, y);
+        });
+        
+        document.getElementById('homeBtn').addEventListener('click', () => {
+            moveTo(POS_INICIAL_X, POS_INICIAL_Y);
+            document.getElementById('x_coord').value = POS_INICIAL_X;
+            document.getElementById('y_coord').value = POS_INICIAL_Y;
+        });
+
+        // Simula un clic en "Home" al cargar la página para dibujar el estado inicial
+        document.getElementById('homeBtn').click();
+    });
+</script>
+
+</body>
+</html>
